@@ -1,0 +1,131 @@
+<launch>
+
+  <!-- all this args come from  reem_tabletop_manipulation_launch launch file for grasping -->
+  <arg name="load_move_arm"   default="true" /> <!-- launch move_arm from here -->
+  <arg name="load_kinematics" default="true" /> <!-- launch Arm Kinematics from here -->
+  <arg name="sim"             default="true"/>
+  <arg name="use_snapshotter" default="true" /> <!-- enable the PointCloud snapshotter -->
+  <arg name="kinect_camera_name"  default="head_mount_xtion" />
+  <arg name="kinect_frame_prefix" default="/head_mount_xtion" />
+
+
+    <!--  Launch Perception -->
+    <!-- We need perception for having a starting pointcloud so the environment server can start and we dont get:
+    waitForService: Service [/register_planning_scene] has not been advertised, waiting... -->
+   <include file="$(find reem_perception_launch)/launch/perception.launch">
+    <arg name="sim" value="$(arg sim)" />
+    <arg name="use_snapshotter" value="$(arg use_snapshotter)" />
+  </include>
+
+
+  <!-- Load Planning Environment parameters -->
+  <!-- Loads reem_planning_description.yaml
+         which contains joint groups & joints in collision -->
+  <!-- Normally this is included in multiple places, and the PR2 pipeline loads it about 4 times! (comment by David)-->
+  <!--<include file="$(find reem_arm_navigation)/launch/reem_planning_environment.launch" /> -->
+  <!-- But we need special params [without them it says 
+  Link name in service request does not match links that kinematics can provide solutions for.
+  Motion planning service failed on /generic_interpolated_ik_right_arm_torso/GetInterpolatedIkMotionPlan
+  and crashes], which we only load once: -->
+  <rosparam command="load" ns="robot_description_planning" file="$(find reem_arm_navigation)/config/reem_planning_description.yaml" />
+
+
+
+  <!-- Environment Server & Planning Scene Validity Server -->
+  <!-- Loads use_monitor & use_collision_map, environment server padding -->
+  <include file="$(find reem_arm_navigation)/launch/environment_server.launch">
+    <arg name="use_monitor" value="true" />
+    <arg name="use_collision_map" value="true" />
+  </include>
+
+  <!-- Arm Kinematics Constraint Aware -->
+  <!-- load custom parameters, set output to terminal -->
+  <group if="$(arg load_kinematics)">
+    <node pkg="arm_kinematics_constraint_aware" type="arm_kinematics_constraint_aware" name="reem_left_arm_kinematics" output="screen">
+      <rosparam command="load" file="$(find reem_arm_navigation)/config/left_arm_kinematics.yaml" />
+    </node>
+    <node pkg="arm_kinematics_constraint_aware" type="arm_kinematics_constraint_aware" name="reem_right_arm_kinematics" output="screen">
+      <rosparam command="load" file="$(find reem_arm_navigation)/config/right_arm_kinematics.yaml" />
+    </node>
+    <node pkg="arm_kinematics_constraint_aware" type="arm_kinematics_constraint_aware" name="reem_right_arm_torso_kinematics" output="screen">
+      <rosparam command="load" file="$(find reem_arm_navigation)/config/right_arm_torso_kinematics.yaml" />
+    </node>
+  </group>
+
+
+  <!-- needed for move_arm -->
+  <node pkg="ompl_ros_interface" type="ompl_ros" name="ompl_planning">
+    <param name="default_planner_config" type="string" value="LazyRRTkConfig1" />
+    <rosparam command="load" file="$(find reem_arm_navigation)/config/ompl_planning.yaml" />
+    <rosparam command="load" file="$(find reem_arm_navigation)/config/robot_padding.yaml" />
+  </node>
+
+
+  <!-- needed for move_arm -->
+  <node pkg="trajectory_filter_server" type="trajectory_filter_server" name="trajectory_filter_server" output="screen">
+    <rosparam command="load" file="$(find trajectory_filter_server)/config/filters.yaml" />
+    <rosparam command="load" file="$(find reem_arm_navigation)/config/joint_limits.yaml" />
+    <rosparam command="load" file="$(find reem_arm_navigation)/config/robot_padding.yaml" />
+  </node>
+
+  <!-- Move Arm Action (standard version) -->
+  <group if="$(arg load_move_arm)">
+    <node pkg="move_arm" type="move_arm_simple_action" name="reem_move_left_arm" output="screen">
+      <param name="group" type="string" value="left_arm" />
+      <param name="trajectory_filter_allowed_time" type="double" value="2.0" />
+      <remap from="arm_ik" to="reem_left_arm_kinematics/get_constraint_aware_ik" />
+      <param name="controller_action_name" type="string" value="left_arm_controller/follow_joint_trajectory" />
+    </node>
+    <node pkg="move_arm" type="move_arm_simple_action" name="reem_move_right_arm_torso" output="screen">
+      <param name="group" type="string" value="right_arm_torso" />
+      <param name="trajectory_filter_allowed_time" type="double" value="2.0" />
+      <remap from="arm_ik" to="reem_right_arm_torso_kinematics/get_constraint_aware_ik" />
+      <param name="controller_action_name" type="string" value="right_arm_torso_controller/follow_joint_trajectory" />
+    </node>
+  </group>
+
+
+  <!-- Interpolated IK -->
+  <!-- was using all zero angles:
+       [[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]]
+
+       now using angles for the 'elbow_back' pose, which has the elbow and wrist horizontal:
+       [[1.6,2.05,-1.64,2.20,1.3,0.0,0.0]]
+
+       Note: ik_utilities.py is hard-coded to reverse angles 0,2,4 of the left arm. 
+             May need to fix that, but it works okay for now.
+  -->
+  <!-- these are needed or we will get: [ERROR] [1373880143.473821520, 169.110000000]: Start state violates joint limits, can't plan. -->
+  <rosparam param="left_arm_ik_start_angles" >[[1.6,2.05,-1.64,2.20,1.3,0.0,0.0]]</rosparam>
+  <rosparam param="right_arm_ik_start_angles">[[1.6,2.05,-1.64,2.20,1.3,0.0,0.0]]</rosparam>
+
+   <!-- right interpolated ik node -->
+  <node name="interpolated_ik_node_right" pkg="interpolated_ik_motion_planner" type="interpolated_ik_motion_planner.py" args="r" respawn="true" output="screen" >
+      <param name="robot_prefix" type="string" value="reem"/> <!-- so it looks for /reem_right_arm_kinematics/  -->
+      <remap from="~ik_start_angles" to="/left_arm_ik_start_angles"/>
+
+      <param name="num_steps" value ="4" /> <!-- number of interpolation steps, min = 2, default = 6 -->
+      <param name="consistent_angle" type="double" value="0.5"/> <!-- max allowable variation in any joint, default = 0.349 -->
+      <param name="collision_aware" type="int" value="1"/> <!-- return collision-aware IK solutions, default = 1 (yes) -->
+      <param name="start_from_end" type="int" value="1"/> <!-- start interpolating from the final (grasp) pose, default = 0 (start at pre-grasp) -->
+  </node>
+
+
+  <!-- 2nd Arm Trajectory Filter -->
+  <!-- service_type: FilterJointTrajectory -->
+  <!-- loads default filter config, which is  unnormalize_trajectory -->
+  <include file="$(find trajectory_filter_server)/launch/trajectory_unnormalize.launch"/>
+
+
+
+  <!-- Interpolated IK -->
+  <include file="$(find generic_interpolated_ik)/launch/all.launch" />
+
+
+  <!-- Fake Controllers List --> 
+  <!-- real REEM currently requires a Service publishing a hard-coded list of available controllers --> 
+  <group unless="$(arg sim)">
+    <node name="fake_controllers_list" pkg="fake_controllers_list" type="fake_controllers_list" args="left_arm_controller right_arm_controller" output="screen" />
+  </group>
+
+</launch>

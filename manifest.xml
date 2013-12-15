@@ -1,0 +1,29 @@
+<package>
+  <description brief="dmp_reem_movements">
+
+     dmp_reem_movements
+
+  </description>
+  <author>Sam Pfeiffer</author>
+  <license>BSD</license>
+  <review status="unreviewed" notes=""/>
+  <url></url>
+  <depend package="rospy"/>
+  <depend package="dmp"/>
+  <depend package="sensor_msgs" />
+  <depend package="control_msgs" />
+  <depend package="actionlib" />
+  <depend package="razer_hydra" />
+  <depend package="object_manipulation_msgs" />
+  <depend package="geometry_msgs" />
+  <depend package="nav_msgs" />
+  <depend package="rosbag" />
+  <depend package="kinematics_msgs" />
+  <depend package="visualization_msgs" />
+  <depend package="tf" />
+  <depend package="std_msgs" />
+  <depend package="trajectory_msgs" />
+
+</package>
+
+
