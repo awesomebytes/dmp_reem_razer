@@ -113,6 +113,7 @@ class trajectoryConstructor():
     def computeIKsPose(self, poselist):
         rospy.loginfo("Computing " + str(len(poselist)) + " IKs" )
         fjt_goal = FollowJointTrajectoryGoal()
+        #names_right_arm_torso = 
         fjt_goal.trajectory.joint_names = self.initial_robot_state.joint_state.name
         
         ik_answer = None
@@ -151,9 +152,10 @@ class trajectoryConstructor():
         marker.header.frame_id = 'base_link'
         marker.type = marker.ARROW
         marker.action = marker.ADD
-        marker.scale.x = 0.05
-        marker.scale.y = 0.05
-        marker.scale.z = 0.05
+        general_scale = 0.01
+        marker.scale.x = general_scale
+        marker.scale.y = general_scale / 3.0
+        marker.scale.z = general_scale / 10.0
         marker.color = color
         marker.pose.orientation = pose.orientation
         marker.pose.position = pose.position
