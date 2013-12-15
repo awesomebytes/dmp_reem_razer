@@ -5,8 +5,6 @@ Created on Wed Jul 24 17:39:55 2013
 
 @author: sampfeiffer
 """
-import roslib; roslib.load_manifest('dmp_reem_movements')
-import rospy
 import sys
 
 

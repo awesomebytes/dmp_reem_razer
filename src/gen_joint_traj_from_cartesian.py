@@ -6,13 +6,10 @@ Created on Sat Dec 14 19:08:11 2013
 @author: Sam Pfeiffer
 """
 
-import roslib;
-roslib.load_manifest('dmp_reem_movements')
 import rospy
 import numpy as np
 import sys
-from kinematics_msgs.srv import GetConstraintAwarePositionIK, GetConstraintAwarePositionIKRequest, GetConstraintAwarePositionIKResponse, GetKinematicSolverInfo, GetKinematicSolverInfoRequest, GetKinematicSolverInfoResponse
-
+from moveit_commander import MoveGroupCommander, RobotCommander, PlanningSceneInterface
 from dmp.srv import *
 from dmp.msg import *
 import pickle
@@ -24,43 +21,39 @@ from visualization_msgs.msg import MarkerArray, Marker
 from tf.transformations import *
 from control_msgs.msg import FollowJointTrajectoryAction, FollowJointTrajectoryGoal
 from trajectory_msgs.msg import JointTrajectoryPoint
+from moveit_msgs.srv import GetPositionIKRequest, GetPositionIKResponse, GetPositionIK
+from moveit_msgs.msg import MoveItErrorCodes
 
 
-import arm_navigation_msgs.msg  # need to fully impor to be able to build the arm_nav_error_dict
 # build a mapping from arm navigation error codes to error names
-arm_nav_error_dict = {}
-for name in arm_navigation_msgs.msg.ArmNavigationErrorCodes.__dict__.keys():
+moveit_error_dict = {}
+for name in MoveItErrorCodes.__dict__.keys():
     if not name[:1] == '_':
-        code = arm_navigation_msgs.msg.ArmNavigationErrorCodes.__dict__[name]
-        arm_nav_error_dict[code] = name
+        code = MoveItErrorCodes.__dict__[name]
+        moveit_error_dict[code] = name
 
 
-IK_SERVICE_NAME = '/reem_right_arm_torso_kinematics/get_constraint_aware_ik'
-IK_SOLVER_INFO_SERVICE_NAME = '/reem_right_arm_torso_kinematics/get_ik_solver_info'
+# IK_SERVICE_NAME = '/reem_right_arm_torso_kinematics/get_constraint_aware_ik'
+# IK_SOLVER_INFO_SERVICE_NAME = '/reem_right_arm_torso_kinematics/get_ik_solver_info'
+# 
+# IK_SERVICE_NAME = '/reem_right_arm_kinematics/get_constraint_aware_ik'
+# IK_SOLVER_INFO_SERVICE_NAME = '/reem_right_arm_kinematics/get_ik_solver_info'
 
-IK_SERVICE_NAME = '/reem_right_arm_kinematics/get_constraint_aware_ik'
-IK_SOLVER_INFO_SERVICE_NAME = '/reem_right_arm_kinematics/get_ik_solver_info'
+IK_SERVICE_NAME = '/compute_ik'
 
 class trajectoryConstructor():
     def __init__(self):
         rospy.loginfo("Waiting for service " + IK_SERVICE_NAME)
         rospy.wait_for_service(IK_SERVICE_NAME)
-        self.ik_serv = rospy.ServiceProxy(IK_SERVICE_NAME, GetConstraintAwarePositionIK)
+        self.ik_serv = rospy.ServiceProxy(IK_SERVICE_NAME, GetPositionIK)
         
-        rospy.loginfo("Waiting for service " + IK_SOLVER_INFO_SERVICE_NAME)
-        rospy.wait_for_service(IK_SOLVER_INFO_SERVICE_NAME)
-        self.robot_kinematic_solver_info_serv = rospy.ServiceProxy(IK_SOLVER_INFO_SERVICE_NAME, GetKinematicSolverInfo)
-        
-        # Getting the info of the kinematic solver
-        gksi_answer = GetKinematicSolverInfoResponse()  # allocated is not needed but helps autocompleting
-        gksi_answer = self.robot_kinematic_solver_info_serv.call(GetKinematicSolverInfoRequest())
-        
-        # Store answer so we ask only one time
-        self.joint_state = JointState()
-        self.joint_state.name = gksi_answer.kinematic_solver_info.joint_names
-        self.joint_state.position = [0.0] * len(gksi_answer.kinematic_solver_info.joint_names)
-        self.ik_link_name = gksi_answer.kinematic_solver_info.link_names[0]
-        
+#         # Store answer so we ask only one time
+#         self.joint_state = JointState()
+#         self.joint_state.name = gksi_answer.kinematic_solver_info.joint_names
+#         self.joint_state.position = [0.0] * len(gksi_answer.kinematic_solver_info.joint_names)
+#         self.ik_link_name = gksi_answer.kinematic_solver_info.link_names[0]
+        self.r_commander = RobotCommander()
+        self.initial_robot_state = self.r_commander.get_current_state()
 
         self.pub_ok_markers = rospy.Publisher('ik_ok_marker_list', MarkerArray, latch=True)
         self.ok_markers = MarkerArray()
@@ -71,24 +64,29 @@ class trajectoryConstructor():
         
         
         
-    def getIkPose(self, pose):
+    def getIkPose(self, pose, group="right_arm_torso", previous_state=None):
+        """Get IK of the pose specified, for the group specified, optionally using
+        the robot_state of previous_state (if not, current robot state will be requested) """
         # point point to test if there is ik
         # returns the answer of the service
-        rqst = GetConstraintAwarePositionIKRequest()
-        #rqst.ik_request.robot_state = None
-        rqst.timeout = rospy.Duration(secs=1)
+        rqst = GetPositionIKRequest()
+        rqst.ik_request.avoid_collisions = True
+        rqst.ik_request.group_name = group
         rqst.ik_request.pose_stamped.header = Header(stamp=rospy.Time.now())
         rqst.ik_request.pose_stamped.header.frame_id = 'base_link'
-
-        rqst.ik_request.ik_link_name = self.ik_link_name
-        rqst.ik_request.ik_seed_state.joint_state = self.joint_state
 
 
         # Set point to check IK for
         rqst.ik_request.pose_stamped.pose.position = pose.position
         rqst.ik_request.pose_stamped.pose.orientation = pose.orientation
+        
+        if previous_state == None:
+            cs = self.r_commander.get_current_state()
+            rqst.ik_request.robot_state = cs
+        else:
+            rqst.ik_request.robot_state = previous_state
 
-        ik_answer = GetConstraintAwarePositionIKResponse()
+        ik_answer = GetPositionIKResponse()
         timeStart = rospy.Time.now()
         ik_answer = self.ik_serv.call(rqst)
         durationCall= rospy.Time.now() - timeStart
@@ -115,12 +113,16 @@ class trajectoryConstructor():
     def computeIKsPose(self, poselist):
         rospy.loginfo("Computing " + str(len(poselist)) + " IKs" )
         fjt_goal = FollowJointTrajectoryGoal()
-        fjt_goal.trajectory.joint_names = self.joint_state.name
+        fjt_goal.trajectory.joint_names = self.initial_robot_state.joint_state.name
         
+        ik_answer = None
         for pose in poselist:
-            ik_answer = self.getIkPose(pose)
-            rospy.loginfo("Got error_code: " + str(ik_answer.error_code.val) + " which means: " + arm_nav_error_dict[ik_answer.error_code.val])
-            if arm_nav_error_dict[ik_answer.error_code.val] == 'SUCCESS':
+            if ik_answer != None:
+                ik_answer = self.getIkPose(pose, previous_state=ik_answer.solution)
+            else:
+                ik_answer = self.getIkPose(pose)
+            rospy.loginfo("Got error_code: " + str(ik_answer.error_code.val) + " which means: " + moveit_error_dict[ik_answer.error_code.val])
+            if moveit_error_dict[ik_answer.error_code.val] == 'SUCCESS':
                 arrow = self.createArrowMarker(pose, ColorRGBA(0,1,0,1))
                 self.ok_markers.markers.append(arrow)
                 jtp = JointTrajectoryPoint()
