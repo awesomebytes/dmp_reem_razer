@@ -11,7 +11,7 @@ import numpy as np
 import sys
 from moveit_commander import MoveGroupCommander, RobotCommander, PlanningSceneInterface
 from dmp.srv import *
-from dmp.msg import *
+from dmp.msg import DMPData, DMPPoint, DMPTraj
 import pickle
 
 from std_msgs.msg import Header, ColorRGBA
@@ -46,6 +46,30 @@ class trajectoryConstructor():
         rospy.loginfo("Waiting for service " + IK_SERVICE_NAME)
         rospy.wait_for_service(IK_SERVICE_NAME)
         self.ik_serv = rospy.ServiceProxy(IK_SERVICE_NAME, GetPositionIK)
+        
+        self.joint_list = ['torso_1_joint', 'torso_2_joint',
+                           'head_1_joint', 'head_2_joint',
+                           'arm_left_1_joint', 'arm_left_2_joint', 'arm_left_3_joint',
+                           'arm_left_4_joint', 'arm_left_5_joint', 'arm_left_6_joint',
+                           'arm_left_7_joint', 
+                           'arm_right_1_joint', 'arm_right_2_joint', 'arm_right_3_joint',
+                           'arm_right_4_joint', 'arm_right_5_joint', 'arm_right_6_joint',
+                           'arm_right_7_joint']
+        self.left_arm = ['arm_left_1_joint', 'arm_left_2_joint', 'arm_left_3_joint',
+                           'arm_left_4_joint', 'arm_left_5_joint', 'arm_left_6_joint',
+                           'arm_left_7_joint']
+        self.right_arm = ['arm_right_1_joint', 'arm_right_2_joint', 'arm_right_3_joint',
+                           'arm_right_4_joint', 'arm_right_5_joint', 'arm_right_6_joint',
+                           'arm_right_7_joint']
+        self.right_arm_torso = ['torso_1_joint', 'torso_2_joint',
+                           'arm_right_1_joint', 'arm_right_2_joint', 'arm_right_3_joint',
+                           'arm_right_4_joint', 'arm_right_5_joint', 'arm_right_6_joint',
+                           'arm_right_7_joint']
+        self.left_arm_torso = ['torso_1_joint', 'torso_2_joint',
+                           'arm_left_1_joint', 'arm_left_2_joint', 'arm_left_3_joint',
+                           'arm_left_4_joint', 'arm_left_5_joint', 'arm_left_6_joint',
+                           'arm_left_7_joint']
+        
         
 #         # Store answer so we ask only one time
 #         self.joint_state = JointState()
@@ -94,7 +118,7 @@ class trajectoryConstructor():
         
         return ik_answer   
         
-    def computeJointTrajFromCartesian(self, points):
+    def computeJointTrajFromCartesian(self, points, arm="right_arm_torso"):
         #fjt_goal = FollowJointTrajectoryGoal()
         # orientation problem is still pending, so for now same quaternion for every point
         generic_ori = Quaternion(w=1.0)
@@ -103,23 +127,31 @@ class trajectoryConstructor():
             pose = Pose(Point(point.positions[0], point.positions[1], point.positions[2]),
                         generic_ori)
             poselist.append(pose)
-        fjt_goal = self.computeIKsPose(poselist)
+        fjt_goal = self.computeIKsPose(poselist, arm)
         # add velocities?
         
         
         return fjt_goal
         
         
-    def computeIKsPose(self, poselist):
+    def computeIKsPose(self, poselist, arm="right_arm"):
         rospy.loginfo("Computing " + str(len(poselist)) + " IKs" )
         fjt_goal = FollowJointTrajectoryGoal()
-        #names_right_arm_torso = 
-        fjt_goal.trajectory.joint_names = self.initial_robot_state.joint_state.name
+
+        if arm == 'right_arm_torso':
+            fjt_goal.trajectory.joint_names = self.right_arm_torso
+        elif arm == 'left_arm_torso':
+            fjt_goal.trajectory.joint_names = self.left_arm_torso
+        elif arm == 'right_arm':
+            fjt_goal.trajectory.joint_names = self.right_arm
+        elif arm == 'left_arm':
+            fjt_goal.trajectory.joint_names = self.left_arm
+        # TODO: add other options
         
         ik_answer = None
         for pose in poselist:
             if ik_answer != None:
-                ik_answer = self.getIkPose(pose, previous_state=ik_answer.solution)
+                ik_answer = self.getIkPose(pose,"right_arm", previous_state=ik_answer.solution)
             else:
                 ik_answer = self.getIkPose(pose)
             rospy.loginfo("Got error_code: " + str(ik_answer.error_code.val) + " which means: " + moveit_error_dict[ik_answer.error_code.val])
@@ -128,9 +160,11 @@ class trajectoryConstructor():
                 self.ok_markers.markers.append(arrow)
                 jtp = JointTrajectoryPoint()
                 #ik_answer = GetConstraintAwarePositionIKResponse()
-                jtp.positions = ik_answer.solution.joint_state.position
-                # TODO: add velocities
-                # TODO: add acc?
+                # sort positions and add only the ones of the joints we are interested in
+                positions = self.sortOutJointList(fjt_goal.trajectory.joint_names, ik_answer.solution.joint_state)
+                jtp.positions = positions
+                # TODO: add velocities | WILL BE DONE OUTSIDE
+                # TODO: add acc? | DUNNO
                 fjt_goal.trajectory.points.append(jtp)
                 self.pub_ok_markers.publish(self.ok_markers)
                 
@@ -140,6 +174,42 @@ class trajectoryConstructor():
                 self.pub_fail_markers.publish(self.fail_markers)
                 
         return fjt_goal
+           
+    def sortOutJointList(self, joint_name_list, joint_state):
+        """ Get only the joints we are interested in and it's values and return it in
+        joint_state.name and joint_state.points format"""
+        rospy.loginfo("Sorting jointlist...")
+        list_to_iterate = joint_name_list      
+        curr_j_s = joint_state
+        ids_list = []
+        position_list = []
+        for joint in list_to_iterate:
+            idx_in_message = curr_j_s.name.index(joint)
+            ids_list.append(idx_in_message)
+            position_list.append(curr_j_s.position[idx_in_message])
+        return position_list
+
+    def adaptTimesAndVelocitiesOfMsg(self, trajectory, plan, desired_final_time):
+        """Adapt the times and velocities of the message for the controller
+        from the times computed in the DMP and adapted to our criteria Actually... i dont know
+        what to do with velocities"""
+        rospy.loginfo("Adapting times and velocities...")
+        traj = trajectory #FollowJointTrajectoryGoal()
+        p = plan #GetDMPPlanResponse()
+        # we should have the same number of points on each, NOPE, as we can have points that IK fails
+#         if len(traj.trajectory.points) != len(p.plan.points):
+#             rospy.logerr("Oops, something went wrong, different number of points")
+#             rospy.logerr("generated trajectory: " + str(len(traj.trajectory.points)) + " plan: " + str(len(p.plan.points)))
+#             exit(0)
+        
+        point = JointTrajectoryPoint()
+        counter = 0
+        for point in traj.trajectory.points:
+            #rospy.loginfo("Step " + str(counter) + " / " + str(len(traj.trajectory.points)))
+            counter += 1
+            point.velocities.extend(len(point.positions) * [0.0]) # adding 0.0 as speeds
+            point.time_from_start = rospy.Duration( counter * (desired_final_time / len(traj.trajectory.points)) ) 
+        return traj
                 
     def publish_markers(self):
         while True:
@@ -168,8 +238,14 @@ if __name__ == '__main__':
     print plan
     rospy.init_node("calc_traj")
     t = trajectoryConstructor()
-    trajectory_goal = t.computeJointTrajFromCartesian(plan.plan.points)
-    print trajectory_goal
-    t.publish_markers()
+    trajectory_goal = t.computeJointTrajFromCartesian(plan.plan.points, "right_arm")
+    # compute speeds and times... which is just to divide by the total time, or something like that
+    t.adaptTimesAndVelocitiesOfMsg(trajectory_goal, plan, 7.0)
+    #print trajectory_goal
+    #t.publish_markers()
+    rospy.loginfo("Times and vels set, sending to controller!")
+    from controller_sender import jointControllerSender
+    j = jointControllerSender()
+    j.sendGoal(trajectory_goal, 'right_arm') 
     
     
