@@ -1,12 +1,13 @@
 #! /usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-Created on Thursday Aug 8 10:10:55 2013
+Created on Tuesday December 31 18:01:53 2013
 
 @author: sampfeiffer
 """
-#import sys
+import sys
 #import actionlib
+import rospy
 import rosbag
 from datetime import datetime
 from razer_hydra.msg import Hydra

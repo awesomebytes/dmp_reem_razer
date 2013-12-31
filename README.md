@@ -11,6 +11,11 @@ dmp_reem_razer
 
 
 Using the ros package of dmp tests ( http://wiki.ros.org/dmp ) but updated for hydro: https://github.com/makokal/dmp
+Also using razer_hydra package updated from: https://github.com/skohlbr/razer_hydra
+(Current one in debs sometimes gives:
+terminate called after throwing an instance of 'std::runtime_error'
+  what():  Time is out of dual 32-bit range
+ And stops working)
 
 Also plotting with matplotlib the trajectories generated.
 
