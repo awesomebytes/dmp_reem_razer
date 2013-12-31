@@ -88,7 +88,7 @@ class trajectoryConstructor():
         
         
         
-    def getIkPose(self, pose, group="right_arm_torso", previous_state=None):
+    def getIkPose(self, pose, group="right_arm", previous_state=None):
         """Get IK of the pose specified, for the group specified, optionally using
         the robot_state of previous_state (if not, current robot state will be requested) """
         # point point to test if there is ik
@@ -191,8 +191,7 @@ class trajectoryConstructor():
 
     def adaptTimesAndVelocitiesOfMsg(self, trajectory, plan, desired_final_time):
         """Adapt the times and velocities of the message for the controller
-        from the times computed in the DMP and adapted to our criteria Actually... i dont know
-        what to do with velocities"""
+        from the times computed in the DMP and velocities 0.0, controller will take care of it"""
         rospy.loginfo("Adapting times and velocities...")
         traj = trajectory #FollowJointTrajectoryGoal()
         p = plan #GetDMPPlanResponse()
