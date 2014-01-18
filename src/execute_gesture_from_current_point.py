@@ -6,7 +6,7 @@ Created on Tuesday December 31 18:01:53 2013
 @author: sampfeiffer
 """
 import sys
-#import actionlib
+import actionlib
 import rospy
 import rosbag
 from datetime import datetime
@@ -14,9 +14,18 @@ from razer_hydra.msg import Hydra
 from geometry_msgs.msg import PoseStamped, Point, PoseArray, Pose
 from nav_msgs.msg import Path
 from tf.transformations import euler_from_quaternion, quaternion_from_euler
+from std_msgs.msg import Header
+from dmp.srv import *
+from dmp.msg import *
+from moveit_msgs.msg import MoveGroupGoal, MoveGroupResult, MoveGroupAction, Constraints, MoveItErrorCodes, JointConstraint
+from control_msgs.msg import FollowJointTrajectoryGoal, FollowJointTrajectoryAction
+from trajectory_msgs.msg import JointTrajectoryPoint
+import numpy as np
+
 
 from controller_sender import jointControllerSender
 from gen_joint_traj_from_cartesian_with_ori import trajectoryConstructor
+from dmp_reem_with_orientation import makePlanRequest
 
 HYDRA_DATA_TOPIC = '/hydra_calib'
 HAND_GRASP_CONTROLLER_RIGHT_AS = '/right_hand_controller/grasp_posture_controller'
@@ -52,9 +61,15 @@ class RazerControlGesture():
         self.gesture_x0 = None
         self.gesture_goal = None
         self.gesture_difference = []
+        self.resp_from_makeLFDRequest = None
         
         self.traj_constructor = trajectoryConstructor()
         self.joint_controller_sender = jointControllerSender()
+        
+        rospy.loginfo("Connecting to move_group AS")
+        self.moveit_ac = actionlib.SimpleActionClient('/move_group', MoveGroupAction)
+        self.moveit_ac.wait_for_server()
+        rospy.loginfo("Succesfully connected.")
 
 
     def loadGestureFromBag(self, bag):
@@ -64,7 +79,7 @@ class RazerControlGesture():
         dt = 1.0
         K = 100
         D = 2.0 * np.sqrt(K)
-        num_bases = 40
+        num_bases = 40 # TODO: this must be related to how long the gesture is
     
         # Fill up traj with real trajectory points  
         traj = []  
@@ -95,6 +110,7 @@ class RazerControlGesture():
         resp = self.makeLFDRequest(dims, traj, dt, K, D, num_bases)
         #Set it as the active DMP
         self.makeSetActiveRequest(resp.dmp_list)
+        self.resp_from_makeLFDRequest = resp
 
         
         
@@ -173,8 +189,8 @@ class RazerControlGesture():
         #goal = [0.259,-0.252,1.289, 0.0212535586323, -0.00664429330438, 0.117483470173]
         goal_thresh = [0.1,0.1,0.1, 0.1, 0.1, 0.1]
         seg_length = -1          #Plan until convergence to goal
-        tau = 2 * resp.tau       #Desired plan should take twice as long as demo
-        tau = resp.tau -1 # HEY WE NEED TO PUT -1 SEC HERE, WHY?? BUG?
+        tau = 2 * self.resp_from_makeLFDRequest.tau       #Desired plan should take twice as long as demo
+        tau = self.resp_from_makeLFDRequest.tau -1 # HEY WE NEED TO PUT -1 SEC HERE, WHY?? BUG?
         dt = 1.0
         integrate_iter = 5       #dt is rather large, so this is > 1
         plan_resp = makePlanRequest(x_0, x_dot_0, t_0, goal, goal_thresh,
@@ -222,6 +238,39 @@ class RazerControlGesture():
         self.current_right_pose = tmp_pose_right
 
 
+    def create_move_group_joints_goal(self, joint_names, joint_values, group="right_arm", plan_only=False):
+        """ Creates a move_group goal based on pose.
+        @arg joint_names list of strings of the joint names
+        @arg joint_values list of digits with the joint values
+        @arg group string representing the move_group group to use
+        @arg plan_only bool to for only planning or planning and executing
+        @return MoveGroupGoal with the desired contents"""
+        
+        header = Header()
+        header.frame_id = 'base_link'
+        header.stamp = rospy.Time.now()
+        moveit_goal = MoveGroupGoal()
+        goal_c = Constraints()
+        for name, value in zip(joint_names, joint_values):
+            joint_c = JointConstraint()
+            joint_c.joint_name = name
+            joint_c.position = value
+            joint_c.tolerance_above = 0.01
+            joint_c.tolerance_below = 0.01
+            joint_c.weight = 1.0
+            goal_c.joint_constraints.append(joint_c)
+    
+        moveit_goal.request.goal_constraints.append(goal_c)
+        moveit_goal.request.num_planning_attempts = 5
+        moveit_goal.request.allowed_planning_time = 5.0
+        moveit_goal.planning_options.plan_only = plan_only
+        moveit_goal.planning_options.planning_scene_diff.is_diff = True
+        moveit_goal.request.group_name = group
+        
+        return moveit_goal
+
+
+
     def run(self):
         rospy.loginfo("Press LB / RB to send the current pose")
         
@@ -245,8 +294,17 @@ class RazerControlGesture():
                 # compute speeds and times... which is just to divide by the total time, or something like that
                 rospy.loginfo("Adapting times and velocities on the trajectory...")
                 self.traj_constructor.adaptTimesAndVelocitiesOfMsg(trajectory_goal, plan, 7.0)
-
-                rospy.loginfo("Times and vels set, sending to controller!")
+                rospy.loginfo("Times and vels set, starting movement!")
+                rospy.loginfo("Sending first pose to moveit so we dont fail on points of the trajectory")
+                a = FollowJointTrajectoryGoal()
+                joint_names = trajectory_goal.trajectory.joint_names
+                joint_values = a.trajectory.points[0].positions
+                group="right_arm"
+                plan_only=False
+                goal = self.create_move_group_joints_goal(joint_names, joint_values,group,plan_only)
+                self.moveit_ac.send_goal()
+                self.moveit_ac.wait_for_result()
+                rospy.loginfo("Sending full trajectory to controller")
                 self.joint_controller_sender.sendGoal(trajectory_goal, 'right_arm') 
                 
                 
