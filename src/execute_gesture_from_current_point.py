@@ -101,10 +101,8 @@ class RazerControlGesture():
         self.gesture_goal = [p.pose.position.x, p.pose.position.y, p.pose.position.z, roll, pitch, yaw]
         
         # Calculate the difference between initial and final point
-        counter = 0
         for val1, val2 in zip(self.gesture_x0, self.gesture_goal):                     
-            self.gesture_difference[counter] = val2-val1
-            counter+=1
+            self.gesture_difference.append(val2-val1)
         
         print str(len(traj)) + " points in example traj."
         resp = self.makeLFDRequest(dims, traj, dt, K, D, num_bases)
@@ -168,11 +166,11 @@ class RazerControlGesture():
     def getPlanForCurrentPose(self):
         """Generate a plan for the current position of the hydra controller"""
         roll, pitch, yaw = euler_from_quaternion([
-                               self.current_right_pose.orientation.x,
-                               self.current_right_pose.orientation.y,
-                               self.current_right_pose.orientation.z,
-                               self.current_right_pose.orientation.w  ])
-        x_0 = [self.current_right_pose.position.x, self.current_right_pose.position.y, self.current_right_pose.position.z,
+                               self.current_right_pose.pose.orientation.x,
+                               self.current_right_pose.pose.orientation.y,
+                               self.current_right_pose.pose.orientation.z,
+                               self.current_right_pose.pose.orientation.w  ])
+        x_0 = [self.current_right_pose.pose.position.x, self.current_right_pose.pose.position.y, self.current_right_pose.pose.position.z,
                roll, pitch, yaw]
         #x_0 = [0.137,-0.264,1.211,0.0395796940422, 0.0202532964694, 0.165785921829]
         x_dot_0 = [0.0,0.0,0.0,0.0,0.0,0.0]
@@ -180,11 +178,10 @@ class RazerControlGesture():
         
         # Create the goal position, which is the initial position + the difference from the final point on the
         # original trained gesture
-        counter=0
         goal = []
         for val1, val2 in zip(x_0, self.gesture_difference):
-            goal[counter] = val1 + val2
-            counter+=1
+            goal.append( val1 + val2 )
+
         
         #goal = [0.259,-0.252,1.289, 0.0212535586323, -0.00664429330438, 0.117483470173]
         goal_thresh = [0.1,0.1,0.1, 0.1, 0.1, 0.1]
@@ -296,13 +293,13 @@ class RazerControlGesture():
                 self.traj_constructor.adaptTimesAndVelocitiesOfMsg(trajectory_goal, plan, 7.0)
                 rospy.loginfo("Times and vels set, starting movement!")
                 rospy.loginfo("Sending first pose to moveit so we dont fail on points of the trajectory")
-                a = FollowJointTrajectoryGoal()
+#                 a = FollowJointTrajectoryGoal()
                 joint_names = trajectory_goal.trajectory.joint_names
-                joint_values = a.trajectory.points[0].positions
+                joint_values = trajectory_goal.trajectory.points[0].positions
                 group="right_arm"
                 plan_only=False
                 goal = self.create_move_group_joints_goal(joint_names, joint_values,group,plan_only)
-                self.moveit_ac.send_goal()
+                self.moveit_ac.send_goal(goal)
                 self.moveit_ac.wait_for_result()
                 rospy.loginfo("Sending full trajectory to controller")
                 self.joint_controller_sender.sendGoal(trajectory_goal, 'right_arm') 
