@@ -21,7 +21,8 @@ from moveit_msgs.msg import MoveGroupGoal, MoveGroupResult, MoveGroupAction, Con
 from control_msgs.msg import FollowJointTrajectoryGoal, FollowJointTrajectoryAction
 from trajectory_msgs.msg import JointTrajectoryPoint
 import numpy as np
-
+import subprocess, yaml
+import math
 
 from controller_sender import jointControllerSender
 from gen_joint_traj_from_cartesian_with_ori import trajectoryConstructor
@@ -62,6 +63,7 @@ class RazerControlGesture():
         self.gesture_goal = None
         self.gesture_difference = []
         self.resp_from_makeLFDRequest = None
+        self.info_bag = None
         
         self.traj_constructor = trajectoryConstructor()
         self.joint_controller_sender = jointControllerSender()
@@ -72,14 +74,20 @@ class RazerControlGesture():
         rospy.loginfo("Succesfully connected.")
 
 
-    def loadGestureFromBag(self, bag):
+    def loadGestureFromBag(self, bagname):
         """Load gesture from the bag name given """
-        #Create a DMP from a 3-D trajectory with orientation
+        # get bag info
+        self.info_bag = yaml.load(subprocess.Popen(['rosbag', 'info', '--yaml', bagname],
+                                                    stdout=subprocess.PIPE).communicate()[0])
+        bases_rel_to_time = math.ceil(self.info_bag['duration'] * 20) # empirically for every second 20 bases it's ok
+        
+        
+        # Create a DMP from a 3-D trajectory with orientation
         dims = 6
         dt = 1.0
         K = 100
         D = 2.0 * np.sqrt(K)
-        num_bases = 40 # TODO: this must be related to how long the gesture is
+        num_bases = bases_rel_to_time
     
         # Fill up traj with real trajectory points  
         traj = []  
@@ -109,6 +117,8 @@ class RazerControlGesture():
         #Set it as the active DMP
         self.makeSetActiveRequest(resp.dmp_list)
         self.resp_from_makeLFDRequest = resp
+        
+
 
         
         
@@ -276,7 +286,7 @@ class RazerControlGesture():
             
         rospy.loginfo("Got the first data of the razer... Now we can do stuff")
             
-        sleep_rate=0.1 # check at 10Hz
+        sleep_rate=0.05 # check at 20Hz
         left_pushed = right_pushed = False
         
         while True:   

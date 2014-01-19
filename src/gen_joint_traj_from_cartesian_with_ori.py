@@ -24,6 +24,7 @@ from trajectory_msgs.msg import JointTrajectoryPoint
 from moveit_msgs.srv import GetPositionIKRequest, GetPositionIKResponse, GetPositionIK
 from moveit_msgs.msg import MoveItErrorCodes
 
+DEBUG_MODE = False
 
 # build a mapping from arm navigation error codes to error names
 moveit_error_dict = {}
@@ -79,12 +80,13 @@ class trajectoryConstructor():
         self.r_commander = RobotCommander()
         self.initial_robot_state = self.r_commander.get_current_state()
 
-        self.pub_ok_markers = rospy.Publisher('ik_ok_marker_list', MarkerArray, latch=True)
-        self.ok_markers = MarkerArray()
+        if DEBUG_MODE:
+            self.pub_ok_markers = rospy.Publisher('ik_ok_marker_list', MarkerArray, latch=True)
+            self.ok_markers = MarkerArray()
         
-        self.pub_fail_markers = rospy.Publisher('ik_fail_marker_list', MarkerArray, latch=True)
-        self.fail_markers = MarkerArray()
-        self.markers_id = 5    
+            self.pub_fail_markers = rospy.Publisher('ik_fail_marker_list', MarkerArray, latch=True)
+            self.fail_markers = MarkerArray()
+            self.markers_id = 5    
         
         
         
@@ -151,10 +153,12 @@ class trajectoryConstructor():
                 ik_answer = self.getIkPose(pose,"right_arm", previous_state=ik_answer.solution)
             else:
                 ik_answer = self.getIkPose(pose)
-            rospy.loginfo("Got error_code: " + str(ik_answer.error_code.val) + " which means: " + moveit_error_dict[ik_answer.error_code.val])
+            if DEBUG_MODE:
+                rospy.loginfo("Got error_code: " + str(ik_answer.error_code.val) + " which means: " + moveit_error_dict[ik_answer.error_code.val])
             if moveit_error_dict[ik_answer.error_code.val] == 'SUCCESS':
-                arrow = self.createArrowMarker(pose, ColorRGBA(0,1,0,1))
-                self.ok_markers.markers.append(arrow)
+                if DEBUG_MODE:
+                    arrow = self.createArrowMarker(pose, ColorRGBA(0,1,0,1))
+                    self.ok_markers.markers.append(arrow)
                 jtp = JointTrajectoryPoint()
                 #ik_answer = GetConstraintAwarePositionIKResponse()
                 # sort positions and add only the ones of the joints we are interested in
@@ -163,12 +167,14 @@ class trajectoryConstructor():
                 # TODO: add velocities | WILL BE DONE OUTSIDE
                 # TODO: add acc? | DUNNO
                 fjt_goal.trajectory.points.append(jtp)
-                self.pub_ok_markers.publish(self.ok_markers)
+                if DEBUG_MODE:
+                    self.pub_ok_markers.publish(self.ok_markers)
                 
             else:
-                arrow = self.createArrowMarker(pose, ColorRGBA(1,0,0,1))
-                self.fail_markers.markers.append(arrow)
-                self.pub_fail_markers.publish(self.fail_markers)
+                if DEBUG_MODE:
+                    arrow = self.createArrowMarker(pose, ColorRGBA(1,0,0,1))
+                    self.fail_markers.markers.append(arrow)
+                    self.pub_fail_markers.publish(self.fail_markers)
                 
         return fjt_goal
            
