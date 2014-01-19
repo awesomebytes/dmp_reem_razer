@@ -300,7 +300,7 @@ class RazerControlGesture():
                 trajectory_goal = self.traj_constructor.computeJointTrajFromCartesian(plan.plan.points, "right_arm")
                 # compute speeds and times... which is just to divide by the total time, or something like that
                 rospy.loginfo("Adapting times and velocities on the trajectory...")
-                self.traj_constructor.adaptTimesAndVelocitiesOfMsg(trajectory_goal, plan, 7.0)
+                self.traj_constructor.adaptTimesAndVelocitiesOfMsg(trajectory_goal, plan, self.info_bag['duration']) # Maybe make the movement longer than the original time
                 rospy.loginfo("Times and vels set, starting movement!")
                 rospy.loginfo("Sending first pose to moveit so we dont fail on points of the trajectory")
 #                 a = FollowJointTrajectoryGoal()

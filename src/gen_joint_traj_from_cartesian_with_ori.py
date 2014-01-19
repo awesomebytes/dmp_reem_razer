@@ -113,10 +113,13 @@ class trajectoryConstructor():
             rqst.ik_request.robot_state = previous_state
 
         ik_answer = GetPositionIKResponse()
-        timeStart = rospy.Time.now()
+        if DEBUG_MODE:
+            timeStart = rospy.Time.now()
         ik_answer = self.ik_serv.call(rqst)
-        durationCall= rospy.Time.now() - timeStart
-        rospy.loginfo("Call took: " + str(durationCall.to_sec()) + "s")
+        
+        if DEBUG_MODE:
+            durationCall= rospy.Time.now() - timeStart
+            rospy.loginfo("Call took: " + str(durationCall.to_sec()) + "s")
         
         return ik_answer   
         
@@ -181,7 +184,8 @@ class trajectoryConstructor():
     def sortOutJointList(self, joint_name_list, joint_state):
         """ Get only the joints we are interested in and it's values and return it in
         joint_state.name and joint_state.points format"""
-        rospy.loginfo("Sorting jointlist...")
+        if DEBUG_MODE:
+            rospy.loginfo("Sorting jointlist...")
         list_to_iterate = joint_name_list      
         curr_j_s = joint_state
         ids_list = []
