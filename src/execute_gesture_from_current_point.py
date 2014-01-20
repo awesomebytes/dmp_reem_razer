@@ -40,7 +40,8 @@ LEFT_HAND_REFERENCE_POSESTAMPED_TOPIC = '/teleop_left_hand_pose_reference'
 PATH3D_TOPIC = '/path3d'
 POSEARRAY_3D_TOPIC = '/posearray3d'
 
-RIGHT_HAND_INITIAL_POINT = Point(x=0.6, y=-0.2, z=1.1)
+#RIGHT_HAND_INITIAL_POINT = Point(x=0.6, y=-0.2, z=1.1)
+RIGHT_HAND_INITIAL_POINT = Point(x=0.6, y=-0.2, z=0.3) # For REEM-c
 LEFT_HAND_INITIAL_POINT = Point(x=0.6, y=0.2, z=1.1)
 
 

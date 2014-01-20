@@ -1,0 +1,17 @@
+<launch>
+  <!-- launch reem simulation -->
+  <!-- <include file="$(find reem_gazebo)/launch/reem_empty_world.launch" /> -->
+
+  <!-- fire up fixed tf for razer hydra -->
+  <node pkg="tf" type="static_transform_publisher" name="hydra_baselink_static_tf" args="0.6 -0.2 1.1 0 0 0 base_link hydra_base 100" />
+
+  <!-- launch razer hydra driver -->
+  <include file="$(find razer_hydra)/launch/hydra.launch" />
+
+  <!-- launch rviz -->
+  <node pkg="rviz" type="rviz" name="rviz_dmp" args="-d $(find dmp_reem_movements)/config/dmp_razer.rviz" />
+
+
+
+
+</launch>
