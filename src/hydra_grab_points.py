@@ -7,6 +7,7 @@ Created on Thursday Aug 8 10:10:55 2013
 """
 #import sys
 #import actionlib
+import rospy
 import rosbag
 from datetime import datetime
 from razer_hydra.msg import Hydra
@@ -117,7 +118,7 @@ class RazerControl():
 #                self.writing_bag = False
 #                self.bag.close()
 #                
-            if self.last_hydra_message.paddles[1].buttons[0] == True and not right_pushed: # left paddle
+            if self.last_hydra_message.paddles[1].buttons[0] == True and not right_pushed:
                 right_pushed = True
                 self.bag_name = datetime.now().isoformat() + ".bag"
                 self.bag = rosbag.Bag(self.bag_name, 'w')
