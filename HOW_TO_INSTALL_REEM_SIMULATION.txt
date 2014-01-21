@@ -1,0 +1,52 @@
+This document resumes how to install REEM hydro simulation as of 12 January 2014.
+
+================
+Install ROS HYDRO for Ubuntu 12.04 (recommended)
+================
+Instructions: http://wiki.ros.org/hydro/Installation/Ubuntu
+
+sudo sh -c 'echo "deb http://packages.ros.org/ros/ubuntu precise main" > /etc/apt/sources.list.d/ros-latest.list'
+wget http://packages.ros.org/ros.key -O - | sudo apt-key add -
+sudo apt-get update
+sudo apt-get install ros-hydro-desktop-full
+sudo rosdep init
+rosdep update
+echo "source /opt/ros/hydro/setup.bash" >> ~/.bashrc
+source ~/.bashrc
+sudo apt-get install python-rosinstall
+
+
+================
+Install MOVEIT!
+================
+Instructions: http://moveit.ros.org/install/
+
+sudo apt-get install ros-hydro-moveit-full
+sudo apt-get install ros-hydro-moveit-full-pr2
+
+
+================
+Set workspace
+================
+Instructions: http://wiki.ros.org/ROS/Tutorials/InstallingandConfiguringROSEnvironment
+
+mkdir -p ~/catkin_ws/src
+cd ~/catkin_ws/src
+catkin_init_workspace
+
+================
+Install REEM SIMULATION
+================
+
+cd ~/catkin_ws/src
+wstool init .
+wstool merge https://raw2.github.com/pal-robotics/pal-ros-pkg/master/reem-sim-hydro.rosinstall
+wstool up
+cd ..
+rosdep install --from-paths src --ignore-src --rosdistro hydro -y
+catkin_make
+source devel/setup.sh
+export USE_RGBD_SENSOR=true
+
+This last variable is to enable the RGBD sensor (Asus Xtion) over the head of REEM.
+
