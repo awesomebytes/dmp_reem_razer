@@ -25,8 +25,16 @@ terminate called after throwing an instance of 'std::runtime_error'
 ```
 
 
-Video of it working available here:
-http://www.youtube.com/watch?v=AKAeQqSU-dY
+Videos of it working available here:
+
+Recorded gesture of handshake: http://www.youtube.com/watch?v=Na13evxMb4U
+
+Executed handshake from different initial position: http://www.youtube.com/watch?v=ASpzVbtw6Io
+
+Example of what happens when some points of the trajectory are not reachable, a wave gesture on REEM: http://www.youtube.com/watch?v=PYQ5SOhqqBA
+
+One of the first working tests: http://www.youtube.com/watch?v=AKAeQqSU-dY
+
 
 
 ===========
