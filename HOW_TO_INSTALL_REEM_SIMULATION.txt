@@ -1,4 +1,4 @@
-This document resumes how to install REEM hydro simulation as of 12 January 2014.
+This document resumes how to install REEM hydro simulation as of 21 January 2014.
 
 ================
 Install ROS HYDRO for Ubuntu 12.04 (recommended)
@@ -40,13 +40,16 @@ Install REEM SIMULATION
 
 cd ~/catkin_ws/src
 wstool init .
-wstool merge https://raw2.github.com/pal-robotics/pal-ros-pkg/master/reem-sim-hydro.rosinstall
+wstool merge YOUR_LOCAL_PATH_TO_dmp_reem_razer/reem-sim-hydro.rosinstall
 wstool up
 cd ..
 rosdep install --from-paths src --ignore-src --rosdistro hydro -y
 catkin_make
 source devel/setup.sh
+
+
 export USE_RGBD_SENSOR=true
 
 This last variable is to enable the RGBD sensor (Asus Xtion) over the head of REEM.
+For dmp_reem_razer you don't need it.
 
