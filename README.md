@@ -21,7 +21,8 @@ default launcher: https://github.com/awesomebytes/razer_hydra
 Current one in debs sometimes gives:
 terminate called after throwing an instance of 'std::runtime_error'
   what():  Time is out of dual 32-bit range
- And stops working```
+ And stops working
+```
 
 
 Video of it working available here:
