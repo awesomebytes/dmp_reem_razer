@@ -24,7 +24,7 @@ from trajectory_msgs.msg import JointTrajectoryPoint
 from moveit_msgs.srv import GetPositionIKRequest, GetPositionIKResponse, GetPositionIK
 from moveit_msgs.msg import MoveItErrorCodes
 
-DEBUG_MODE = True
+DEBUG_MODE = False
 
 # build a mapping from arm navigation error codes to error names
 moveit_error_dict = {}
